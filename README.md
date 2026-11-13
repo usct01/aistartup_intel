@@ -1,5 +1,8 @@
 # AI Startup Signal
 
+[![CI](https://github.com)](https://github.com)
+
+
 Multi-agent intelligence platform that discovers AI startups and funding activity,
 verifies every material fact against retained evidence, classifies companies against a
 multi-label AI taxonomy, ranks momentum, and produces a personalized daily newsletter.
