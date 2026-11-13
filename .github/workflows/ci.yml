@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python (from .python-version)
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run Ruff linter
+        run: uv run ruff check src tests
+
+      - name: Run Mypy type checker
+        run: uv run mypy src
+
+      - name: Run Pytest suite
+        env:
+          AISI_LLM_OFFLINE: "true"
+        run: uv run pytest
+
+      - name: Verify offline demo pipeline
+        env:
+          AISI_LLM_OFFLINE: "true"
+        run: uv run aistartup-intel demo
