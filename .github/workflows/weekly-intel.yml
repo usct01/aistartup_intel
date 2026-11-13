@@ -1,0 +1,71 @@
+name: Weekly AI Startup Intelligence Run
+
+on:
+  schedule:
+    # Runs every Monday at 07:00 UTC (12:30 PM IST)
+    - cron: '0 7 * * 1'
+  # Allows manual triggering anytime from the Actions tab or via `gh workflow run`
+  workflow_dispatch:
+    inputs:
+      offline_mode:
+        description: 'Run in offline mock mode (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  weekly-crawl:
+    name: Crawl, Verify & Generate Weekly Digest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Preserves your local SQLite ledger & object store between weekly runs
+      # if you are not using an external PostgreSQL database
+      - name: Restore SQLite ledger & object store cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/
+            *.db
+            *.sqlite3
+          key: aisi-state-${{ github.run_id }}
+          restore-keys: |
+            aisi-state-
+
+      - name: Initialize / migrate database schema
+        env:
+          AISI_DATABASE_URL: ${{ secrets.AISI_DATABASE_URL || 'sqlite:///./data/aisi.db' }}
+        run: |
+          mkdir -p data
+          uv run aistartup-intel init-db
+
+      - name: Run weekly live crawl & multi-agent pipeline
+        env:
+          AISI_LLM_OFFLINE: ${{ github.event.inputs.offline_mode || 'false' }}
+          AISI_OPENROUTER_API_KEY: ${{ secrets.AISI_OPENROUTER_API_KEY }}
+          AISI_DATABASE_URL: ${{ secrets.AISI_DATABASE_URL || 'sqlite:///./data/aisi.db' }}
+          AISI_FUNDING_THRESHOLD_USD: "10000000"
+        run: |
+          uv run aistartup-intel crawl --output-newsletter latest_newsletter.md
+
+      - name: Upload generated newsletter & run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-newsletter-${{ github.run_number }}
+          path: |
+            latest_newsletter.md
+            data/
+          if-no-files-found: warn
