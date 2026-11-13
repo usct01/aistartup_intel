@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,82 @@ def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> No
     import uvicorn
 
     uvicorn.run("aistartup_intel.api.app:app", host=host, port=port, reload=reload)
+
+
+@app.command("crawl")
+def crawl(
+    run_id: str = typer.Option("weekly-crawl", help="Run identifier for the manifest"),
+    output_newsletter: Path = typer.Option(
+        Path("latest_newsletter.md"), help="Path to write the generated newsletter digest"
+    ),
+) -> None:
+    """Poll configured live RSS sources and run events through the agent pipeline."""
+    from datetime import datetime
+
+    from .agents.base import PipelineContext
+    from .agents.orchestrator import Orchestrator
+    from .connectors import RSSConnector
+    from .crawler import SourceRegistry
+    from .llm.gateway import LLMGateway
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        db.init_db()
+        registry = SourceRegistry.default()
+        events = []
+
+        # Poll all enabled RSS sources in SourceRegistry
+        for policy in registry.all():
+            if getattr(policy, "kind", None) == "rss" and getattr(policy, "enabled", True):
+                connector = RSSConnector(policy)
+                async for event in connector.events():
+                    events.append(event)
+
+        typer.echo(f"Collected {len(events)} events from live RSS sources.")
+
+        with db.session_scope() as session:
+            ctx = PipelineContext(
+                settings=settings,
+                llm=LLMGateway(settings=settings),
+                run_id=f"{run_id}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}",
+                session=session,
+                registry=registry,
+            )
+            orchestrator = Orchestrator(ctx)
+            outcomes = await orchestrator.process_events(events) if events else []
+
+            # Export summary & published companies for weekly digest
+            companies = repo.list_companies(session)
+            over_10m = [
+                (company, total_usd)
+                for company, total_usd in companies
+                if (total_usd or 0.0) >= settings.funding_threshold_usd
+            ]
+
+            lines = [
+                f"# AI Startup Signal — Weekly Digest "
+                f"({datetime.now(UTC).date().isoformat()})",
+                "",
+                f"- **Events processed:** {len(events)}",
+                f"- **Outcomes recorded:** {len(outcomes)}",
+                f"- **Companies > ${settings.funding_threshold_usd:,.0f} disclosed:** {len(over_10m)}",
+                "",
+                "## Highlighted Companies",
+            ]
+            for company, total_usd in over_10m:
+                lines.append(f"- **{company.canonical_name}**: ${total_usd:,.0f} total disclosed")
+
+            output_newsletter.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            return {
+                "events": len(events),
+                "outcomes": len(outcomes),
+                "companies_over_threshold": len(over_10m),
+                "newsletter_path": str(output_newsletter),
+            }
+
+    summary = asyncio.run(_run())
+    typer.echo(json.dumps(summary, indent=2))
 
 
 def main() -> None:
