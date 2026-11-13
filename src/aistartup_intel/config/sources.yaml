@@ -1,0 +1,55 @@
+# Curated source registry. Compliance lives here: paths, rates, legal notes.
+# Blocked sources are disabled or api_only; nothing here is scraped against policy.
+sources:
+  - source_id: sec_form_d
+    name: SEC EDGAR Form D
+    base_url: https://www.sec.gov
+    source_type: filing
+    tier: A
+    enabled: true
+    respect_robots: true
+    allowed_paths: ["/cgi-bin/browse-edgar", "/Archives", "/cgi-bin/srqsbrowse", "/files"]
+    requests_per_second: 0.2
+    user_agent: "AISIResearchBot/0.1 (contact@example.com)"
+    legal_note: "Public SEC filings; observe EDGAR fair-access rate limits."
+
+  - source_id: hn
+    name: Hacker News
+    base_url: https://hacker-news.firebaseio.com
+    source_type: api
+    tier: B
+    enabled: true
+    respect_robots: true
+    api_only: true
+    requests_per_second: 2.0
+    legal_note: "Official Firebase API via Algolia search where available."
+
+  - source_id: github
+    name: GitHub
+    base_url: https://api.github.com
+    source_type: api
+    tier: B
+    enabled: true
+    api_only: true
+    requests_per_second: 1.0
+    legal_note: "Official REST API; respect unauthenticated rate limits."
+
+  - source_id: arxiv
+    name: arXiv
+    base_url: https://export.arxiv.org
+    source_type: api
+    tier: B
+    enabled: true
+    api_only: true
+    requests_per_second: 0.34
+    legal_note: "arXiv API; <= 1 request per 3 seconds."
+
+  - source_id: rss_example
+    name: Example Press RSS
+    base_url: https://example.com
+    source_type: rss
+    tier: C
+    enabled: false
+    respect_robots: true
+    requests_per_second: 0.5
+    legal_note: "Placeholder; enable only with a licensed/authorized feed."
